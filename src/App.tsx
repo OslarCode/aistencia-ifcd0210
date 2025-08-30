@@ -4,8 +4,13 @@ import { useLocalStorage } from "./lib/useLocalStorage";
 import { useMemo } from "react";
 import { generateClassDays } from "./lib/dates";
 
+import UnitsConfig from "./features/units/UnitsConfig";
+import { DEFAULT_UNITS, type Unit } from "./app/units";
+
 export default function App() {
   const [config, setConfig] = useLocalStorage<TCourseConfig>("ifcd0210_config", DEFAULT_CONFIG);
+  const [units, setUnits] = useLocalStorage<Unit[]>("ifcd0210_units", DEFAULT_UNITS);
+
   const classDays = useMemo(() => generateClassDays(config), [config]);
 
   return (
@@ -23,11 +28,16 @@ export default function App() {
       <main className="mx-auto max-w-6xl px-4 py-6 space-y-6">
         <CourseConfig config={config} onChange={setConfig} />
 
-        {/* Aquí, en el Módulo 2, añadiremos:
-            - Pase de lista (por día)
-            - Resumen por unidad/total
-            - Exportación CSV
-        */}
+        {/* NUEVO: gestión de unidades */}
+        <UnitsConfig
+          units={units}
+          onChange={setUnits}
+          classDays={classDays}
+          hoursPerDay={config.hoursPerDay}
+          requiredPct={config.requiredPct}
+        />
+
+        {/* Próximo módulo: Pase de lista y resumen por unidad */}
       </main>
     </div>
   );

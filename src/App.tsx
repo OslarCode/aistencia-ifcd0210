@@ -16,6 +16,7 @@ import type { AttendanceState } from "./app/attendance";
 
 import SummaryPanel from "./features/summary/SummaryPanel";
 import BackupPanel from "./features/backup/BackupPanel";
+import ReportPanel from "./features/reports/ReportPanel";
 
 export default function App() {
   // Config + Unidades
@@ -95,6 +96,15 @@ export default function App() {
           setStudents={setStudents}
           setAttendance={setAttendance}
           setSelectedDate={setSelectedDate}
+        />
+
+        <ReportPanel
+          config={config}
+          units={units}
+          students={students}
+          attendance={attendance}
+          classDays={classDays}
+          hoursPerDay={config.hoursPerDay}
         />
       </main>
     </div>

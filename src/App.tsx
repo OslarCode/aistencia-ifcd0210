@@ -14,8 +14,11 @@ import { DEFAULT_STUDENTS } from "./app/students";
 import AttendancePanel from "./features/attendance/AttendancePanel";
 import type { AttendanceState } from "./app/attendance";
 
+// NUEVO: Resumen
+import SummaryPanel from "./features/summary/SummaryPanel";
+
 export default function App() {
-  // Config + Unidades (ya hechos)
+  // Config + Unidades
   const [config, setConfig] = useLocalStorage<TCourseConfig>("ifcd0210_config", DEFAULT_CONFIG);
   const [units, setUnits] = useLocalStorage<Unit[]>("ifcd0210_units", DEFAULT_UNITS);
   const classDays = useMemo(() => generateClassDays(config), [config]);
@@ -70,6 +73,16 @@ export default function App() {
           setAttendance={setAttendance}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
+        />
+
+        {/* NUEVO: Resumen por unidad y total */}
+        <SummaryPanel
+          students={students}
+          attendance={attendance}
+          units={units}
+          classDays={classDays}
+          config={config}
+          hoursPerDay={config.hoursPerDay}
         />
       </main>
     </div>

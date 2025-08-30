@@ -14,8 +14,8 @@ import { DEFAULT_STUDENTS } from "./app/students";
 import AttendancePanel from "./features/attendance/AttendancePanel";
 import type { AttendanceState } from "./app/attendance";
 
-// NUEVO: Resumen
 import SummaryPanel from "./features/summary/SummaryPanel";
+import BackupPanel from "./features/backup/BackupPanel";
 
 export default function App() {
   // Config + Unidades
@@ -75,7 +75,6 @@ export default function App() {
           setSelectedDate={setSelectedDate}
         />
 
-        {/* NUEVO: Resumen por unidad y total */}
         <SummaryPanel
           students={students}
           attendance={attendance}
@@ -83,6 +82,19 @@ export default function App() {
           classDays={classDays}
           config={config}
           hoursPerDay={config.hoursPerDay}
+        />
+
+        <BackupPanel
+          config={config}
+          units={units}
+          students={students}
+          attendance={attendance}
+          selectedDate={selectedDate}
+          setConfig={setConfig}
+          setUnits={setUnits}
+          setStudents={setStudents}
+          setAttendance={setAttendance}
+          setSelectedDate={setSelectedDate}
         />
       </main>
     </div>

@@ -4,9 +4,10 @@ import type { Student } from "../../app/students";
 type Props = {
   students: Student[];
   onChange: (next: Student[]) => void;
+  onRemove?: (id: string) => void; // <-- NUEVO (App borra en BD)
 };
 
-export default function StudentsPanel({ students, onChange }: Props) {
+export default function StudentsPanel({ students, onChange, onRemove }: Props) {
   const [bulk, setBulk] = useState("");
 
   const addBulk = () => {
@@ -20,7 +21,19 @@ export default function StudentsPanel({ students, onChange }: Props) {
     setBulk("");
   };
 
-  const remove = (id: string) => onChange(students.filter((s) => s.id !== id));
+  const remove = (id: string) => {
+    // actualiza UI
+    onChange(students.filter((s) => s.id !== id));
+    // si hay callback remoto, borra en BD
+    onRemove?.(id);
+  };
+
+  const emptyAll = () => {
+    if (confirm("¿Vaciar lista de alumnos?")) {
+      // si quieres borrar en BD todos a la vez, mejor manejarlo arriba en App
+      onChange([]);
+    }
+  };
 
   return (
     <section className="rounded-2xl bg-white p-6 shadow">
@@ -43,12 +56,7 @@ export default function StudentsPanel({ students, onChange }: Props) {
             <button className="rounded-xl border px-3 py-2" onClick={addBulk}>
               Añadir
             </button>
-            <button
-              className="rounded-xl border px-3 py-2"
-              onClick={() => {
-                if (confirm("¿Vaciar lista de alumnos?")) onChange([]);
-              }}
-            >
+            <button className="rounded-xl border px-3 py-2" onClick={emptyAll}>
               Vaciar
             </button>
           </div>

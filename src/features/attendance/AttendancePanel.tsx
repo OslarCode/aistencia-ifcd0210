@@ -3,21 +3,27 @@ import type { AttendanceState, AttendanceMark } from "../../app/attendance";
 import type { Student } from "../../app/students";
 
 type Props = {
-  classDays: string[]; // días lectivos (YYYY-MM-DD)
-  students: Student[]; // lista de alumnos
-  attendance: AttendanceState; // estado de asistencia
-  setAttendance: (next: AttendanceState) => void;
-  selectedDate: string; // día elegido (YYYY-MM-DD)
+  classDays: string[];
+  students: Student[];
+  attendance: AttendanceState;
+  selectedDate: string;
   setSelectedDate: (next: string) => void;
+
+  // === NUEVOS callbacks (App llama a Supabase) ===
+  onSetMark: (sid: string, date: string, mark: AttendanceMark | "") => void;
+  onMarkAllPresent: (date: string) => void;
+  onClearDay: (date: string) => void;
 };
 
 export default function AttendancePanel({
   classDays,
   students,
   attendance,
-  setAttendance,
   selectedDate,
   setSelectedDate,
+  onSetMark,
+  onMarkAllPresent,
+  onClearDay,
 }: Props) {
   const idx = classDays.indexOf(selectedDate);
   const canPrev = idx > 0;
@@ -28,29 +34,6 @@ export default function AttendancePanel({
     if (v === "P") return "A";
     if (v === "A") return "J";
     return "";
-  };
-
-  const setMark = (sid: string, date: string, mark: AttendanceMark) => {
-    setAttendance({
-      ...attendance,
-      [sid]: { ...(attendance[sid] || {}), [date]: mark },
-    });
-  };
-
-  const markAllPresent = () => {
-    const copy: AttendanceState = { ...attendance };
-    for (const s of students) {
-      copy[s.id] = { ...(copy[s.id] || {}), [selectedDate]: "P" };
-    }
-    setAttendance(copy);
-  };
-
-  const clearDay = () => {
-    const copy: AttendanceState = { ...attendance };
-    for (const s of students) {
-      if (copy[s.id]) delete copy[s.id][selectedDate];
-    }
-    setAttendance(copy);
   };
 
   const stats = useMemo(() => {
@@ -109,10 +92,16 @@ export default function AttendancePanel({
             ▶
           </button>
 
-          <button className="ml-2 rounded-lg border px-3 py-1.5" onClick={markAllPresent}>
+          <button
+            className="ml-2 rounded-lg border px-3 py-1.5"
+            onClick={() => onMarkAllPresent(selectedDate)}
+          >
             Marcar todos PRESENTE
           </button>
-          <button className="rounded-lg border px-3 py-1.5" onClick={clearDay}>
+          <button
+            className="rounded-lg border px-3 py-1.5"
+            onClick={() => onClearDay(selectedDate)}
+          >
             Borrar día
           </button>
         </div>
@@ -144,7 +133,7 @@ export default function AttendancePanel({
                   <td className="p-2">
                     <select
                       value={mark}
-                      onChange={(e) => setMark(s.id, selectedDate, e.target.value as any)}
+                      onChange={(e) => onSetMark(s.id, selectedDate, e.target.value as any)}
                       className="rounded-lg border px-2 py-1.5"
                     >
                       <option value="">—</option>
@@ -156,7 +145,7 @@ export default function AttendancePanel({
                   <td className="p-2">
                     <button
                       className="rounded-lg border px-2 py-1"
-                      onClick={() => setMark(s.id, selectedDate, cycle(mark))}
+                      onClick={() => onSetMark(s.id, selectedDate, cycle(mark))}
                     >
                       CICLAR (—→P→A→J→—)
                     </button>

@@ -5,6 +5,7 @@ import { mapUnitsToDays, uuid, validateUnit } from "../../lib/units";
 type Props = {
   units: Unit[];
   onChange: (next: Unit[]) => void;
+  onRemove?: (id: string) => void; // <-- NUEVO (App borra en BD)
   classDays: string[];
   hoursPerDay: number;
   requiredPct: number;
@@ -13,6 +14,7 @@ type Props = {
 export default function UnitsConfig({
   units,
   onChange,
+  onRemove,
   classDays,
   hoursPerDay,
   requiredPct,
@@ -27,7 +29,14 @@ export default function UnitsConfig({
       { id: uuid(), code: "UFxxxx", name: "Nueva unidad", start: "", end: "", requiredPct },
     ]);
   };
-  const removeUnit = (id: string) => onChange(units.filter((u) => u.id !== id));
+
+  const removeUnit = (id: string) => {
+    // actualiza UI
+    onChange(units.filter((u) => u.id !== id));
+    // si hay callback remoto, borra en BD
+    onRemove?.(id);
+  };
+
   const update = (id: string, patch: Partial<Unit>) =>
     onChange(units.map((u) => (u.id === id ? { ...u, ...patch } : u)));
 
@@ -122,7 +131,9 @@ export default function UnitsConfig({
 
               <div className="col-span-2 text-center">
                 <div
-                  className={`inline-flex rounded-full border px-2 py-1 text-xs ${days.length ? "" : "bg-red-50 border-red-300 text-red-700"}`}
+                  className={`inline-flex rounded-full border px-2 py-1 text-xs ${
+                    days.length ? "" : "bg-red-50 border-red-300 text-red-700"
+                  }`}
                 >
                   {days.length} d · {hours} h
                 </div>

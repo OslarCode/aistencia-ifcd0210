@@ -18,7 +18,7 @@ import SummaryPanel from "./features/summary/SummaryPanel";
 import BackupPanel from "./features/backup/BackupPanel";
 import ReportPanel from "./features/reports/ReportPanel";
 
-// === NUEVO: capa de datos (Supabase) ===
+// === Capa de datos (Supabase) ===
 import {
   loadConfig,
   saveConfig,
@@ -33,7 +33,7 @@ import {
   clearAttendanceFor,
 } from "./db/repo";
 
-// pequeño helper de debounce
+// --- helpers ---
 function debounce<T extends (...args: any[]) => void>(fn: T, ms = 400) {
   let t: number | undefined;
   return (...args: Parameters<T>) => {
@@ -41,18 +41,23 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms = 400) {
     t = window.setTimeout(() => fn(...args), ms);
   };
 }
+const isUuid = (v: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 
 export default function App() {
-  // Estado base (ya no usamos useLocalStorage)
+  // Estado base
   const [config, setConfig] = useState<TCourseConfig>(DEFAULT_CONFIG);
   const [units, setUnits] = useState<Unit[]>(DEFAULT_UNITS);
   const [students, setStudents] = useState<Student[]>(DEFAULT_STUDENTS);
   const [attendance, setAttendance] = useState<AttendanceState>({});
   const [selectedDate, setSelectedDate] = useState<string>("");
 
+  // Flag de hidratación: evita persistir antes de cargar BD
+  const [hydrated, setHydrated] = useState(false);
+
   const classDays = useMemo(() => generateClassDays(config), [config]);
 
-  // Carga inicial desde BD
+  // Carga inicial + normalización de IDs a UUID (si vienen "MF0491-UF1841", "s-1", etc.)
   useEffect(() => {
     (async () => {
       const [cfg, us, ss, at] = await Promise.all([
@@ -61,61 +66,95 @@ export default function App() {
         loadStudents(),
         loadAttendance(),
       ]);
+
       if (cfg) setConfig(cfg);
-      if (us.length) setUnits(us);
-      if (ss.length) setStudents(ss);
+
+      // --- UNITS ---
+      const baseUnits = (us?.length ? us : DEFAULT_UNITS) as Unit[];
+      let unitsChanged = false;
+      const fixedUnits = baseUnits.map((u) => {
+        if (!u.id || !isUuid(u.id)) {
+          unitsChanged = true;
+          return { ...u, id: crypto.randomUUID() };
+        }
+        return u;
+      });
+      setUnits(fixedUnits);
+      if (unitsChanged) {
+        // guardamos una vez para consolidar IDs y que las fechas ya queden asociadas
+        await upsertUnits(fixedUnits);
+      }
+
+      // --- STUDENTS ---
+      const baseStudents = (ss?.length ? ss : DEFAULT_STUDENTS) as Student[];
+      let studentsChanged = false;
+      const fixedStudents = baseStudents.map((s) => {
+        if (!s.id || !isUuid(s.id)) {
+          studentsChanged = true;
+          return { ...s, id: crypto.randomUUID() };
+        }
+        return s;
+      });
+      setStudents(fixedStudents);
+      if (studentsChanged) {
+        await upsertStudents(fixedStudents);
+      }
+
+      // --- ATTENDANCE ---
       setAttendance(at);
+
+      // Selecciona primer día lectivo disponible
       const days = generateClassDays(cfg ?? DEFAULT_CONFIG);
       setSelectedDate(days[0] ?? "");
+
+      setHydrated(true);
     })().catch((e) => console.error("Load error:", e));
   }, []);
 
-  // Si cambia el calendario y la fecha seleccionada ya no existe, recolocar
+  // Recoloca fecha seleccionada si ya no existe
   useEffect(() => {
     if (!classDays.length) return;
     if (!classDays.includes(selectedDate)) setSelectedDate(classDays[0]);
   }, [classDays, selectedDate]);
 
-  // Persistencia: CONFIG (debounced)
+  // Persistencia (solo cuando hydrated === true)
   const persistConfig = useMemo(
     () =>
       debounce((next: TCourseConfig) => {
+        if (!hydrated) return;
         saveConfig(next).catch((e) => console.error("saveConfig:", e));
       }, 400),
-    [],
+    [hydrated],
   );
   useEffect(() => {
-    // guardar cada vez que cambie config (tras debounce)
     persistConfig(config);
   }, [config, persistConfig]);
 
-  // Persistencia: UNITS (debounced)
-  const persistUnits = useMemo(
+  const persistUnitsDebounced = useMemo(
     () =>
       debounce((list: Unit[]) => {
+        if (!hydrated) return;
         upsertUnits(list).catch((e) => console.error("upsertUnits:", e));
       }, 400),
-    [],
+    [hydrated],
   );
   useEffect(() => {
-    persistUnits(units);
-  }, [units, persistUnits]);
+    persistUnitsDebounced(units);
+  }, [units, persistUnitsDebounced]);
 
-  // Persistencia: STUDENTS (debounced)
-  const persistStudents = useMemo(
+  const persistStudentsDebounced = useMemo(
     () =>
       debounce((list: Student[]) => {
+        if (!hydrated) return;
         upsertStudents(list).catch((e) => console.error("upsertStudents:", e));
       }, 400),
-    [],
+    [hydrated],
   );
   useEffect(() => {
-    persistStudents(students);
-  }, [students, persistStudents]);
+    persistStudentsDebounced(students);
+  }, [students, persistStudentsDebounced]);
 
   // === Handlers remotos específicos ===
-
-  // Unidades: eliminar (estado + BD)
   const handleRemoveUnit = async (id: string) => {
     setUnits((prev) => prev.filter((u) => u.id !== id));
     try {
@@ -125,7 +164,6 @@ export default function App() {
     }
   };
 
-  // Alumnos: eliminar (estado + BD)
   const handleRemoveStudent = async (id: string) => {
     setStudents((prev) => prev.filter((s) => s.id !== id));
     try {
@@ -135,25 +173,19 @@ export default function App() {
     }
   };
 
-  // Asistencia: marcar uno
   const setMarkRemote = async (sid: string, date: string, mark: AttendanceMark | "") => {
     setAttendance((prev) => ({
       ...prev,
       [sid]: { ...(prev[sid] || {}), [date]: mark as AttendanceMark },
     }));
-
     try {
-      if (mark) {
-        await setAttendanceMarkDB(sid, date, mark as AttendanceMark);
-      } else {
-        await clearAttendanceFor(date, [sid]);
-      }
+      if (mark) await setAttendanceMarkDB(sid, date, mark as AttendanceMark);
+      else await clearAttendanceFor(date, [sid]);
     } catch (e) {
       console.error("setAttendance:", e);
     }
   };
 
-  // Asistencia: marcar todos presentes en el día
   const markAllPresentRemote = async (date: string) => {
     setAttendance((prev) => {
       const copy: AttendanceState = { ...prev };
@@ -169,7 +201,6 @@ export default function App() {
     }
   };
 
-  // Asistencia: borrar marcas del día
   const clearDayRemote = async (date: string) => {
     setAttendance((prev) => {
       const copy: AttendanceState = { ...prev };
@@ -206,17 +237,13 @@ export default function App() {
         <UnitsConfig
           units={units}
           onChange={setUnits}
-          onRemove={handleRemoveUnit} // <-- NUEVO: elimina en BD
+          onRemove={handleRemoveUnit}
           classDays={classDays}
           hoursPerDay={config.hoursPerDay}
           requiredPct={config.requiredPct}
         />
 
-        <StudentsPanel
-          students={students}
-          onChange={setStudents}
-          onRemove={handleRemoveStudent} // <-- NUEVO: elimina en BD
-        />
+        <StudentsPanel students={students} onChange={setStudents} onRemove={handleRemoveStudent} />
 
         <AttendancePanel
           classDays={classDays}
@@ -224,9 +251,9 @@ export default function App() {
           attendance={attendance}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
-          onSetMark={setMarkRemote} // <-- NUEVO
-          onMarkAllPresent={markAllPresentRemote} // <-- NUEVO
-          onClearDay={clearDayRemote} // <-- NUEVO
+          onSetMark={setMarkRemote}
+          onMarkAllPresent={markAllPresentRemote}
+          onClearDay={clearDayRemote}
         />
 
         <SummaryPanel
